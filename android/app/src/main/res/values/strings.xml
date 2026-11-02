@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">문서뷰어</string>
+    <string name="title_activity_main">문서뷰어</string>
+    <string name="package_name">kr.docviewer.noads</string>
+    <string name="custom_url_scheme">kr.docviewer.noads</string>
+</resources>
