@@ -39,7 +39,11 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log || {
+            grep -E "error:|What went wrong|FAILURE|Could not|> " build.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
 
       - uses: actions/upload-artifact@v4
         with:
