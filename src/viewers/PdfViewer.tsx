@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import * as pdfjs from 'pdfjs-dist';
+// 구형 iOS 사파리·카톡 브라우저 호환을 위해 legacy 빌드 사용
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 const BASE = import.meta.env.BASE_URL;
@@ -85,6 +86,7 @@ function PdfPage({ doc, index, zoom, est }: { doc: PDFDocumentProxy; index: numb
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const [size, setSize] = useState(est);
+  const [failed, setFailed] = useState('');
 
   // 화면 근처에 왔을 때만 그린다 (수백 페이지 PDF도 가볍게)
   useEffect(() => {
@@ -106,7 +108,11 @@ function PdfPage({ doc, index, zoom, est }: { doc: PDFDocumentProxy; index: numb
       setSize({ w: base.width, h: base.height });
       const avail = Math.min(window.innerWidth - 16, 1000);
       const cssScale = (avail / base.width) * zoom;
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      let dpr = Math.min(window.devicePixelRatio || 1, 3);
+      // 아이폰은 캔버스 1장당 메모리 한도가 있어 너무 크면 하얗게 나옴 → 약 400만 픽셀로 제한
+      const MAX_PIXELS = 4_000_000;
+      const px = base.width * cssScale * dpr * base.height * cssScale * dpr;
+      if (px > MAX_PIXELS) dpr *= Math.sqrt(MAX_PIXELS / px);
       const vp = page.getViewport({ scale: cssScale * dpr });
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -115,10 +121,12 @@ function PdfPage({ doc, index, zoom, est }: { doc: PDFDocumentProxy; index: numb
       task = page.render({ canvas, viewport: vp });
       try {
         await task.promise;
-      } catch {
-        /* 취소됨 */
+        setFailed('');
+      } catch (e) {
+        const err = e as { name?: string; message?: string };
+        if (!cancelled && err?.name !== 'RenderingCancelledException') setFailed(err?.message ?? String(e));
       }
-    })();
+    })().catch((e) => !cancelled && setFailed(e instanceof Error ? e.message : String(e)));
     return () => {
       cancelled = true;
       task?.cancel();
@@ -131,6 +139,7 @@ function PdfPage({ doc, index, zoom, est }: { doc: PDFDocumentProxy; index: numb
   return (
     <div ref={holder} className="page" style={{ width: w, height: h }} data-page={index}>
       {visible && <canvas ref={canvasRef} style={{ width: w, height: h }} />}
+      {failed && <span className="page-err">{index}쪽 표시 오류: {failed}</span>}
       <span className="page-no">{index}</span>
     </div>
   );
